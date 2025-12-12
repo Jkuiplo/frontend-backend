@@ -3,7 +3,6 @@
 import Image from 'next/image';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuthStore } from '@/store/useAuthStore';
 import { useSettingsStore } from '@/store/useSettingsStore';
 import { translations } from '@/lib/translations';
 import Link from 'next/link';
@@ -14,7 +13,6 @@ import { User, Mail, Lock } from 'lucide-react';
 
 export default function SignUpPage() {
   const router = useRouter();
-  const { register } = useAuthStore();
   const { language } = useSettingsStore();
   const t = translations[language];
 
@@ -59,18 +57,32 @@ export default function SignUpPage() {
       return;
     }
 
-    const result = await register(
-      formData.username,
-      formData.email,
-      formData.password
-    );
+    try {
+      const response = await fetch('/api/auth/signup', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          username: formData.username,
+          email: formData.email,
+          password: formData.password,
+        }),
+      });
 
-    setLoading(false);
+      const result = await response.json();
 
-    if (result.success) {
-      router.push('/home');
-    } else {
-      setError(result.error || t.registrationFailed);
+      setLoading(false);
+
+      if (result.success) {
+        router.push('/home');
+      } else {
+        setError(result.error || t.registrationFailed);
+      }
+    } catch (err) {
+      setLoading(false);
+      setError(t.registrationFailed);
+      console.log(err);
     }
   };
 

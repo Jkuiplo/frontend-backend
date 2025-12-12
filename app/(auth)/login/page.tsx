@@ -3,7 +3,6 @@
 import Image from 'next/image';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuthStore } from '@/store/useAuthStore';
 import { useSettingsStore } from '@/store/useSettingsStore';
 import { translations } from '@/lib/translations';
 import Link from 'next/link';
@@ -14,7 +13,6 @@ import { User, Lock } from 'lucide-react';
 
 export default function SignInPage() {
   const router = useRouter();
-  const { login } = useAuthStore();
   const { language } = useSettingsStore();
   const t = translations[language];
 
@@ -36,14 +34,31 @@ export default function SignInPage() {
       return;
     }
 
-    const result = await login(formData.emailOrUsername, formData.password);
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: formData.emailOrUsername,
+          password: formData.password,
+        }),
+      });
 
-    setLoading(false);
+      const result = await response.json();
 
-    if (result.success) {
-      router.push('/home');
-    } else {
-      setError(result.error || t.loginFailed);
+      setLoading(false);
+
+      if (result.success) {
+        router.push('/home');
+      } else {
+        setError(result.error || t.loginFailed);
+      }
+    } catch (err) {
+      setLoading(false);
+      setError(t.loginFailed);
+      console.log(err);
     }
   };
 

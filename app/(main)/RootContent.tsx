@@ -18,7 +18,7 @@ export default function RootContent({
   useEffect(() => {
     setMounted(true);
     checkAuth();
-  }, [checkAuth]);
+  }, [checkAuth]); // Убрали mounted из зависимостей
 
   useEffect(() => {
     if (!mounted) return;

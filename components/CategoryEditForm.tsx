@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, ComponentType } from 'react';
 import { useAuthStore } from '@/store/useAuthStore';
 import {
   updateUserCategory,
@@ -21,9 +21,26 @@ import {
   Trash2,
   Save,
   X,
+  Home,
+  Coffee,
+  Car,
+  GraduationCap,
+  Briefcase,
+  Utensils,
+  CreditCard,
+  PiggyBank,
+  Coins,
+  Gem,
+  Bitcoin,
+  Smartphone,
 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
-const iconMap = {
+// Карта иконок с новыми иконками (объявляем вне компонента)
+const iconMap: Record<
+  string,
+  ComponentType<{ className?: string; style?: React.CSSProperties }>
+> = {
   ShoppingCart,
   Bus,
   Heart,
@@ -33,8 +50,21 @@ const iconMap = {
   Wallet,
   Banknote,
   Landmark,
+  Home,
+  Coffee,
+  Car,
+  GraduationCap,
+  Briefcase,
+  Utensils,
+  CreditCard,
+  PiggyBank,
+  Coins,
+  Gem,
+  Bitcoin,
+  Smartphone,
 };
 
+// Обновляем список доступных иконок (объявляем вне компонента)
 const availableIcons = [
   { name: 'ShoppingCart', component: ShoppingCart },
   { name: 'Bus', component: Bus },
@@ -42,9 +72,12 @@ const availableIcons = [
   { name: 'ShoppingBag', component: ShoppingBag },
   { name: 'Gamepad2', component: Gamepad2 },
   { name: 'Plane', component: Plane },
-  { name: 'Wallet', component: Wallet },
-  { name: 'Banknote', component: Banknote },
-  { name: 'Landmark', component: Landmark },
+  { name: 'Home', component: Home },
+  { name: 'Coffee', component: Coffee },
+  { name: 'Car', component: Car },
+  { name: 'GraduationCap', component: GraduationCap },
+  { name: 'Briefcase', component: Briefcase },
+  { name: 'Utensils', component: Utensils },
 ];
 
 interface CategoryEditFormProps {
@@ -63,8 +96,8 @@ export function CategoryEditForm({
   const [name, setName] = useState(category.name);
   const [selectedIcon, setSelectedIcon] = useState(category.icon);
 
-  const CategoryIcon =
-    iconMap[selectedIcon as keyof typeof iconMap] || ShoppingCart;
+  // Получаем компонент иконки из карты для редактирования
+  const SelectedIcon = iconMap[selectedIcon] || ShoppingCart;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -90,8 +123,7 @@ export function CategoryEditForm({
   };
 
   if (!isEditing) {
-    const DisplayIcon =
-      iconMap[category.icon as keyof typeof iconMap] || ShoppingCart;
+    const DisplayIcon = iconMap[category.icon] || ShoppingCart;
 
     return (
       <div
@@ -108,14 +140,17 @@ export function CategoryEditForm({
           >
             <DisplayIcon
               className="w-6 h-6"
-              style={{ color: 'var(--foreground)' }}
+              style={{ color: 'var(--foreground)' } as React.CSSProperties}
             />
           </div>
           <button
             onClick={() => setIsEditing(true)}
             className="p-2 rounded-lg transition-colors hover:bg-[var(--secondary-bg)]"
           >
-            <Edit3 className="w-4 h-4" style={{ color: 'var(--foreground)' }} />
+            <Edit3
+              className="w-4 h-4"
+              style={{ color: 'var(--foreground)' } as React.CSSProperties}
+            />
           </button>
         </div>
         <h3 className="font-semibold text-lg">{category.name}</h3>
@@ -137,9 +172,9 @@ export function CategoryEditForm({
           className="w-12 h-12 rounded-2xl flex items-center justify-center"
           style={{ backgroundColor: 'var(--secondary-bg)' }}
         >
-          <CategoryIcon
+          <SelectedIcon
             className="w-6 h-6"
-            style={{ color: 'var(--foreground)' }}
+            style={{ color: 'var(--foreground)' } as React.CSSProperties}
           />
         </div>
         <div className="flex gap-2">
@@ -147,14 +182,20 @@ export function CategoryEditForm({
             type="submit"
             className="p-2 rounded-lg transition-colors hover:bg-[var(--secondary-bg)]"
           >
-            <Save className="w-4 h-4" style={{ color: 'var(--foreground)' }} />
+            <Save
+              className="w-4 h-4"
+              style={{ color: 'var(--foreground)' } as React.CSSProperties}
+            />
           </button>
           <button
             type="button"
             onClick={handleCancel}
             className="p-2 rounded-lg transition-colors hover:bg-[var(--secondary-bg)]"
           >
-            <X className="w-4 h-4" style={{ color: 'var(--foreground)' }} />
+            <X
+              className="w-4 h-4"
+              style={{ color: 'var(--foreground)' } as React.CSSProperties}
+            />
           </button>
           <button
             type="button"
@@ -186,15 +227,16 @@ export function CategoryEditForm({
               key={icon.name}
               type="button"
               onClick={() => setSelectedIcon(icon.name)}
-              className={`p-2 rounded-lg transition-colors ${
+              className={cn(
+                'p-2 rounded-lg transition-colors flex items-center justify-center',
                 selectedIcon === icon.name
                   ? 'bg-[var(--secondary-bg)]'
                   : 'hover:bg-[var(--page-bg)]'
-              }`}
+              )}
             >
               <IconComponent
                 className="w-5 h-5"
-                style={{ color: 'var(--foreground)' }}
+                style={{ color: 'var(--foreground)' } as React.CSSProperties}
               />
             </button>
           );

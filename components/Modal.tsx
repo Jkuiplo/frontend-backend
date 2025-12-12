@@ -39,8 +39,8 @@ export default function Modal() {
     if (isOpen('addCategory')) return <AddCategoryModal />;
     if (isOpen('addWallet')) return <AddWalletModal />;
     if (isOpen('profileMenu')) return <AccountModal />;
-    if (isOpen('editTransaction') && modalData)
-      return <EditTransactionModal transaction={modalData} />;
+    if (isOpen('editTransaction') && modalData?.transaction)
+      return <EditTransactionModal transaction={modalData.transaction} />;
     return null;
   };
 

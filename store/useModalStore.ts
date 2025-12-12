@@ -10,12 +10,20 @@ type ModalName =
   | 'logout'
   | 'editTransaction';
 
+// Используем конкретный тип для транзакции
+import { Transaction } from '@/store/useTransactionStore';
+
+interface ModalData {
+  transaction?: Transaction;
+  // Добавьте другие возможные типы данных
+}
+
 type ModalStore = {
-  openModal: (name: ModalName, data?: any) => void;
+  openModal: (name: ModalName, data?: ModalData) => void;
   closeModal: (name: ModalName) => void;
   isOpen: (name: ModalName) => boolean;
   modals: Record<ModalName, boolean>;
-  modalData: any;
+  modalData: ModalData | null;
   closeAll: () => void;
 };
 
@@ -35,7 +43,7 @@ export const useModalStore = create<ModalStore>((set, get) => ({
   openModal: (name, data) =>
     set((state) => ({ 
       modals: { ...state.modals, [name]: true },
-      modalData: data 
+      modalData: data || null
     })),
 
   closeModal: (name) =>

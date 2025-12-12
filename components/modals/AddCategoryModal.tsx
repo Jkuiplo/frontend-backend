@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { X } from 'lucide-react';
 import { useModalStore } from '@/store/useModalStore';
 import { useAuthStore } from '@/store/useAuthStore';
 import { addUserCategory } from '@/lib/userData';
@@ -15,17 +14,54 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
 } from '@/components/ui/select';
+import {
+  ShoppingCart,
+  Bus,
+  Heart,
+  ShoppingBag,
+  Gamepad2,
+  Plane,
+  Home,
+  Coffee,
+  Car,
+  GraduationCap,
+  Briefcase,
+  Utensils,
+  X,
+} from 'lucide-react';
 
+// Убираем подписи, оставляем только value и иконку
 const categoryIcons = [
-  { value: 'ShoppingCart', label: '🛒 Shopping' },
-  { value: 'Bus', label: '🚌 Transport' },
-  { value: 'Heart', label: '❤️ Health' },
-  { value: 'ShoppingBag', label: '🛍️ Retail' },
-  { value: 'Gamepad2', label: '🎮 Entertainment' },
-  { value: 'Plane', label: '✈️ Travel' },
+  { value: 'ShoppingCart', icon: ShoppingCart },
+  { value: 'Bus', icon: Bus },
+  { value: 'Heart', icon: Heart },
+  { value: 'ShoppingBag', icon: ShoppingBag },
+  { value: 'Gamepad2', icon: Gamepad2 },
+  { value: 'Plane', icon: Plane },
+  { value: 'Home', icon: Home },
+  { value: 'Coffee', icon: Coffee },
+  { value: 'Car', icon: Car },
+  { value: 'GraduationCap', icon: GraduationCap },
+  { value: 'Briefcase', icon: Briefcase },
+  { value: 'Utensils', icon: Utensils },
 ];
+
+// Карта иконок для быстрого доступа
+const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
+  ShoppingCart,
+  Bus,
+  Heart,
+  ShoppingBag,
+  Gamepad2,
+  Plane,
+  Home,
+  Coffee,
+  Car,
+  GraduationCap,
+  Briefcase,
+  Utensils,
+};
 
 export default function AddCategoryModal() {
   const { closeModal } = useModalStore();
@@ -35,6 +71,9 @@ export default function AddCategoryModal() {
 
   const [categoryName, setCategoryName] = useState('');
   const [selectedIcon, setSelectedIcon] = useState('ShoppingCart');
+
+  // Получаем компонент иконки из карты
+  const IconComponent = iconMap[selectedIcon] || ShoppingCart;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -81,15 +120,22 @@ export default function AddCategoryModal() {
           <div className="space-y-2">
             <Label>Icon</Label>
             <Select value={selectedIcon} onValueChange={setSelectedIcon}>
-              <SelectTrigger className="w-[140px]">
-                <SelectValue />
+              <SelectTrigger className="w-[120px]">
+                <div className="flex items-center gap-2">
+                  <IconComponent className="w-4 h-4" />
+                </div>
               </SelectTrigger>
               <SelectContent>
-                {categoryIcons.map((icon) => (
-                  <SelectItem key={icon.value} value={icon.value}>
-                    {icon.label}
-                  </SelectItem>
-                ))}
+                {categoryIcons.map((icon) => {
+                  const Icon = icon.icon;
+                  return (
+                    <SelectItem key={icon.value} value={icon.value}>
+                      <div className="flex items-center gap-2">
+                        <Icon className="w-4 h-4" />
+                      </div>
+                    </SelectItem>
+                  );
+                })}
               </SelectContent>
             </Select>
           </div>

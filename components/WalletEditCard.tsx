@@ -11,24 +11,54 @@ import {
   Trash2,
   Save,
   X,
-} from 'lucide-react';
+  CreditCard,
+  PiggyBank,
+  Coins,
+  Gem,
+  Bitcoin,
+  ShoppingBag,
+  Briefcase,
+  Smartphone,
+  Home,
+} from 'lucide-react'; // Добавляем все иконки
+import { useSettingsStore } from '@/store/useSettingsStore';
+import { formatCurrency } from '@/lib/currencyUtils';
 
+// Обновляем карту иконок с новыми иконками
 const iconMap = {
   Wallet: WalletIcon,
   Banknote: Banknote,
   Landmark: Landmark,
+  CreditCard: CreditCard,
+  PiggyBank: PiggyBank,
+  Coins: Coins,
+  Gem: Gem,
+  Bitcoin: Bitcoin,
+  ShoppingBag: ShoppingBag,
+  Briefcase: Briefcase,
+  Smartphone: Smartphone,
+  Home: Home,
 };
 
+// Обновляем список доступных иконок
 const availableIcons = [
   { name: 'Wallet', component: WalletIcon },
   { name: 'Banknote', component: Banknote },
   { name: 'Landmark', component: Landmark },
+  { name: 'CreditCard', component: CreditCard },
+  { name: 'PiggyBank', component: PiggyBank },
+  { name: 'Coins', component: Coins },
+  { name: 'Gem', component: Gem },
+  { name: 'Bitcoin', component: Bitcoin },
+  { name: 'ShoppingBag', component: ShoppingBag },
+  { name: 'Briefcase', component: Briefcase },
+  { name: 'Smartphone', component: Smartphone },
+  { name: 'Home', component: Home },
 ];
 
 interface WalletEditCardProps {
   wallet: Wallet;
   iconName: string;
-  currencySymbol: string;
   isOpen: boolean;
   onUpdate: () => void;
 }
@@ -36,14 +66,13 @@ interface WalletEditCardProps {
 export function WalletEditCard({
   wallet,
   iconName,
-  currencySymbol,
   isOpen,
   onUpdate,
 }: WalletEditCardProps) {
   const { user } = useAuthStore();
+  const { currency } = useSettingsStore();
   const [isEditing, setIsEditing] = useState(isOpen);
   const [name, setName] = useState(wallet.name);
-  const [amount, setAmount] = useState(wallet.amount.toString());
   const [selectedIcon, setSelectedIcon] = useState(wallet.icon);
 
   const IconComponent = iconMap[iconName as keyof typeof iconMap] || WalletIcon;
@@ -57,7 +86,7 @@ export function WalletEditCard({
       user.id,
       wallet.id,
       name,
-      parseFloat(amount),
+      wallet.amount, // Сохраняем исходный баланс без изменений
       selectedIcon
     );
     onUpdate();
@@ -73,7 +102,6 @@ export function WalletEditCard({
 
   const handleCancel = () => {
     setName(wallet.name);
-    setAmount(wallet.amount.toString());
     setSelectedIcon(wallet.icon);
     setIsEditing(false);
   };
@@ -106,8 +134,7 @@ export function WalletEditCard({
         </div>
         <h3 className="font-semibold text-lg mb-2">{wallet.name}</h3>
         <div className="text-2xl font-bold">
-          {currencySymbol}
-          {wallet.amount.toLocaleString()}
+          {formatCurrency(wallet.amount, currency)}
         </div>
       </div>
     );
@@ -172,19 +199,11 @@ export function WalletEditCard({
         placeholder="Wallet name"
       />
 
-      <input
-        type="number"
-        value={amount}
-        onChange={(e) => setAmount(e.target.value)}
-        className="w-full p-3 rounded-xl mb-4 focus:outline-none"
-        style={{
-          backgroundColor: 'var(--secondary-bg)',
-          color: 'var(--foreground)',
-        }}
-        placeholder="Amount"
-      />
+      <div className="text-2xl font-bold mb-4">
+        {formatCurrency(wallet.amount, currency)}
+      </div>
 
-      <div className="flex gap-2 mb-4">
+      <div className="grid grid-cols-4 gap-2 mb-4">
         {availableIcons.map((icon) => {
           const IconComponent = icon.component;
           return (
@@ -192,7 +211,7 @@ export function WalletEditCard({
               key={icon.name}
               type="button"
               onClick={() => setSelectedIcon(icon.name)}
-              className={`p-2 rounded-lg transition-colors ${
+              className={`p-2 rounded-lg transition-colors flex items-center justify-center ${
                 selectedIcon === icon.name
                   ? 'bg-[var(--secondary-bg)]'
                   : 'hover:bg-[var(--page-bg)]'

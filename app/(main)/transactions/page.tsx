@@ -18,6 +18,11 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
+import {
+  formatDateTime,
+  getCategoryIconComponent,
+  getWalletIconComponent,
+} from '@/lib/utils';
 
 type SortField = 'date' | 'amount';
 type SortOrder = 'asc' | 'desc';
@@ -36,18 +41,37 @@ export default function TransactionsPage() {
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [dateFilter, setDateFilter] = useState<DateFilterType>('all');
 
-  const transactions = user ? getUserTransactions(user.id) : [];
-  const categories = user ? getUserCategories(user.id) : [];
-  const wallets = user ? getUserWallets(user.id) : [];
+  const transactions = useMemo(() => {
+    if (!user) return [];
+    return getUserTransactions(user.id);
+  }, [user, getUserTransactions]);
+
+  const categories = useMemo(() => {
+    if (!user) return [];
+    return getUserCategories(user.id);
+  }, [user]);
+
+  const wallets = useMemo(() => {
+    if (!user) return [];
+    return getUserWallets(user.id);
+  }, [user]);
 
   const filteredTransactions = useMemo(() => {
     const now = new Date();
 
     return transactions
       .filter((t) => {
-        const matchesSearch = t.comment
-          .toLowerCase()
-          .includes(searchQuery.toLowerCase());
+        const matchesSearch =
+          t.comment.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          (t.type === 'expense' &&
+            categories
+              .find((c) => c.id === t.categoryId)
+              ?.name.toLowerCase()
+              .includes(searchQuery.toLowerCase())) ||
+          wallets
+            .find((w) => w.id === t.walletId)
+            ?.name.toLowerCase()
+            .includes(searchQuery.toLowerCase());
 
         const matchesCategory =
           selectedCategory === 'all' || t.categoryId === selectedCategory;
@@ -81,6 +105,8 @@ export default function TransactionsPage() {
     dateFilter,
     sortBy,
     sortOrder,
+    categories,
+    wallets,
   ]);
 
   const toggleSort = (field: SortField) => {
@@ -102,15 +128,22 @@ export default function TransactionsPage() {
     );
   };
 
-  const getCategoryName = (categoryId?: string) => {
-    if (!categoryId) return 'Income';
+  const getCategoryInfo = (categoryId?: string) => {
+    if (!categoryId)
+      return { name: 'Income', icon: getWalletIconComponent('Wallet') };
     const category = categories.find((c) => c.id === categoryId);
-    return category?.name || 'Unknown';
+    return {
+      name: category?.name || 'Unknown',
+      icon: getCategoryIconComponent(category?.icon || 'ShoppingCart'),
+    };
   };
 
-  const getWalletName = (walletId: number) => {
+  const getWalletInfo = (walletId: number) => {
     const wallet = wallets.find((w) => w.id === walletId);
-    return wallet?.name || 'Unknown';
+    return {
+      name: wallet?.name || 'Unknown',
+      icon: getWalletIconComponent(wallet?.icon || 'Wallet'),
+    };
   };
 
   return (
@@ -215,42 +248,77 @@ export default function TransactionsPage() {
           {filteredTransactions.map((transaction) => {
             const isIncome = transaction.type === 'income';
 
-            return (
-              <Card
-                key={transaction.id}
-                className="p-5 flex items-center justify-between hover:shadow-md transition-shadow cursor-pointer"
-                onClick={() => openModal('editTransaction', transaction)}
-              >
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-2xl flex items-center justify-center bg-secondary">
-                    <span className="text-2xl">{isIncome ? '💰' : '💸'}</span>
+            if (isIncome) {
+              const walletInfo = getWalletInfo(transaction.walletId);
+              const WalletIconComponent = walletInfo.icon;
+
+              return (
+                <Card
+                  key={transaction.id}
+                  className="p-5 flex items-center justify-between hover:shadow-md transition-shadow cursor-pointer"
+                  onClick={() => openModal('editTransaction', { transaction })}
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-2xl flex items-center justify-center bg-secondary">
+                      <WalletIconComponent className="w-6 h-6 text-green-500" />
+                    </div>
+                    <div>
+                      <div className="font-semibold">Income</div>
+                      <div className="text-sm text-muted-foreground">
+                        {walletInfo.name}
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <div className="font-semibold">
-                      {transaction.comment || 'Transaction'}
+
+                  <div className="text-right">
+                    <div className="font-bold text-lg text-green-500">
+                      +{formatCurrency(transaction.amount, currency)}
                     </div>
                     <div className="text-sm text-muted-foreground">
-                      {getCategoryName(transaction.categoryId)} •{' '}
-                      {getWalletName(transaction.walletId)}
+                      {formatDateTime(transaction.date)}
                     </div>
                   </div>
-                </div>
+                </Card>
+              );
+            } else {
+              const categoryInfo = getCategoryInfo(transaction.categoryId);
+              const walletInfo = getWalletInfo(transaction.walletId);
+              const CategoryIconComponent = categoryInfo.icon;
 
-                <div className="text-right">
-                  <div
-                    className={`font-bold text-lg ${
-                      isIncome ? 'text-green-500' : 'text-red-500'
-                    }`}
-                  >
-                    {isIncome ? '+' : '-'}
-                    {formatCurrency(transaction.amount, currency)}
+              return (
+                <Card
+                  key={transaction.id}
+                  className="p-5 flex items-center justify-between hover:shadow-md transition-shadow cursor-pointer"
+                  onClick={() => openModal('editTransaction', { transaction })}
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-2xl flex items-center justify-center bg-secondary">
+                      <CategoryIconComponent className="w-6 h-6 text-red-500" />
+                    </div>
+                    <div>
+                      <div className="font-semibold">{categoryInfo.name}</div>
+                      <div className="text-sm text-muted-foreground">
+                        Expense • {walletInfo.name}
+                      </div>
+                      {transaction.comment && (
+                        <div className="text-sm text-foreground mt-1">
+                          {transaction.comment}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  <div className="text-sm text-muted-foreground">
-                    {new Date(transaction.date).toLocaleDateString()}
+
+                  <div className="text-right">
+                    <div className="font-bold text-lg text-red-500">
+                      -{formatCurrency(transaction.amount, currency)}
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      {formatDateTime(transaction.date)}
+                    </div>
                   </div>
-                </div>
-              </Card>
-            );
+                </Card>
+              );
+            }
           })}
         </div>
 

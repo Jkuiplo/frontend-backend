@@ -8,6 +8,7 @@ import { useSettingsStore } from '@/store/useSettingsStore';
 import { getUserWallets, getUserCategories } from '@/lib/userData';
 import { translations } from '@/lib/translations';
 import { currencySymbols } from '@/lib/currencyUtils';
+import { formatCurrency } from '@/lib/currencyUtils';
 import { X } from 'lucide-react';
 import {
   Select,
@@ -22,7 +23,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
 interface EditTransactionModalProps {
-  transaction: Transaction;
+  transaction: Transaction | undefined;
 }
 
 export default function EditTransactionModal({
@@ -34,27 +35,82 @@ export default function EditTransactionModal({
   const { language, currency } = useSettingsStore();
   const t = translations[language];
 
-  const [type, setType] = useState<'expense' | 'income'>(transaction.type);
-  const [amount, setAmount] = useState(transaction.amount.toString());
-  const [comment, setComment] = useState(transaction.comment);
+  const [type, setType] = useState<'expense' | 'income'>(
+    transaction?.type || 'expense'
+  );
+  const [amount, setAmount] = useState(transaction?.amount.toString() || '');
+  const [comment, setComment] = useState(transaction?.comment || '');
   const [selectedWallet, setSelectedWallet] = useState(
-    transaction.walletId.toString()
+    transaction?.walletId.toString() || ''
   );
   const [selectedCategory, setSelectedCategory] = useState(
-    transaction.categoryId || ''
+    transaction?.categoryId || ''
   );
   const [transactionDate, setTransactionDate] = useState<string>(
-    new Date(transaction.date).toISOString().slice(0, 16)
+    transaction
+      ? new Date(transaction.date).toISOString().slice(0, 16)
+      : new Date().toISOString().slice(0, 16)
   );
+  const [error, setError] = useState('');
 
   const wallets = user ? getUserWallets(user.id) : [];
   const categories = user ? getUserCategories(user.id) : [];
 
+  // Если транзакция не существует, не рендерим модалку
+  if (!transaction) {
+    return null;
+  }
+
+  const validateAmount = (value: string): boolean => {
+    const numValue = parseFloat(value);
+    return !isNaN(numValue) && numValue >= 1;
+  };
+
+  const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setAmount(value);
+
+    if (value && !validateAmount(value)) {
+      setError('Amount must be at least 1');
+    } else {
+      setError('');
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!amount || !selectedWallet) return;
-    if (type === 'expense' && !selectedCategory) return;
+    // Валидация
+    if (!amount || !validateAmount(amount)) {
+      setError('Amount must be at least 1');
+      return;
+    }
+
+    if (!selectedWallet) {
+      setError('Please select a wallet');
+      return;
+    }
+
+    if (type === 'expense' && !selectedCategory) {
+      setError('Please select a category for expense');
+      return;
+    }
+
+    // Проверка баланса кошелька для расходов (если тип изменился на expense или сумма увеличилась)
+    if (type === 'expense') {
+      const wallet = wallets.find((w) => w.id === parseInt(selectedWallet));
+      const amountNum = parseFloat(amount);
+
+      // Проверяем только если это новый расход или увеличенный расход
+      if (transaction.type === 'income' || amountNum > transaction.amount) {
+        if (wallet && wallet.amount < amountNum) {
+          setError(
+            `Insufficient funds. Wallet balance: ${currencySymbols[currency]}${wallet.amount.toLocaleString()}`
+          );
+          return;
+        }
+      }
+    }
 
     updateTransaction(transaction.id, {
       type,
@@ -95,10 +151,19 @@ export default function EditTransactionModal({
         </button>
       </div>
 
+      {error && (
+        <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg text-sm">
+          {error}
+        </div>
+      )}
+
       <form onSubmit={handleSubmit} className="space-y-4">
         <Tabs
           value={type}
-          onValueChange={(value) => setType(value as 'expense' | 'income')}
+          onValueChange={(value) => {
+            setType(value as 'expense' | 'income');
+            setError('');
+          }}
           className="w-full"
         >
           <TabsList className="grid w-full grid-cols-2">
@@ -108,7 +173,7 @@ export default function EditTransactionModal({
         </Tabs>
 
         <div className="space-y-2">
-          <Label htmlFor="amount">{t.amount}</Label>
+          <Label htmlFor="amount">{t.amount} *</Label>
           <div className="relative">
             <span
               className="absolute left-3 top-1/2 -translate-y-1/2 text-lg font-semibold"
@@ -120,22 +185,26 @@ export default function EditTransactionModal({
               id="amount"
               type="number"
               step="0.01"
+              min="1"
               value={amount}
-              onChange={(e) => setAmount(e.target.value)}
+              onChange={handleAmountChange}
               className="pl-10"
-              placeholder="0.00"
+              placeholder="1.00"
+              required
             />
           </div>
+          <p className="text-xs text-muted-foreground">Minimum amount is 1</p>
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="date">Date & Time</Label>
+          <Label htmlFor="date">Date & Time *</Label>
           <Input
             id="date"
             type="datetime-local"
             value={transactionDate}
             onChange={(e) => setTransactionDate(e.target.value)}
             className="w-full"
+            required
           />
         </div>
 
@@ -154,15 +223,21 @@ export default function EditTransactionModal({
 
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-2">
-            <Label>{t.selectWallet}</Label>
-            <Select value={selectedWallet} onValueChange={setSelectedWallet}>
+            <Label>{t.selectWallet} *</Label>
+            <Select
+              value={selectedWallet}
+              onValueChange={(value) => {
+                setSelectedWallet(value);
+                setError('');
+              }}
+            >
               <SelectTrigger>
                 <SelectValue placeholder={t.selectWallet} />
               </SelectTrigger>
               <SelectContent>
                 {wallets.map((wallet) => (
                   <SelectItem key={wallet.id} value={wallet.id.toString()}>
-                    {wallet.name}
+                    {wallet.name} ({formatCurrency(wallet.amount, currency)})
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -171,10 +246,13 @@ export default function EditTransactionModal({
 
           {type === 'expense' && (
             <div className="space-y-2">
-              <Label>{t.selectCategory}</Label>
+              <Label>{t.selectCategory} *</Label>
               <Select
                 value={selectedCategory}
-                onValueChange={setSelectedCategory}
+                onValueChange={(value) => {
+                  setSelectedCategory(value);
+                  setError('');
+                }}
               >
                 <SelectTrigger>
                   <SelectValue placeholder={t.selectCategory} />

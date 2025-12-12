@@ -1,6 +1,6 @@
 import localFont from 'next/font/local';
 import '@/app/globals.css';
-import MainLayout from './(main)/layout';
+import React from 'react';
 
 const inter = localFont({
   src: [

@@ -2,7 +2,6 @@
 
 import { useModalStore } from '@/store/useModalStore';
 import { useSettingsStore } from '@/store/useSettingsStore';
-import { translations } from '@/lib/translations';
 import Button from './Button';
 import { usePathname } from 'next/navigation';
 import { Page, usePageStore } from '@/store/usePageStore';
@@ -12,7 +11,6 @@ export default function Header() {
   const { setPage } = usePageStore();
   const { openModal } = useModalStore();
   const { language } = useSettingsStore();
-  const t = translations[language];
 
   const pathname = usePathname();
   const currentPage = pathname.replace('/', '') || 'home';

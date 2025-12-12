@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import { Transaction } from './useTransactionStore';
 
 type ModalName =
   | 'add'

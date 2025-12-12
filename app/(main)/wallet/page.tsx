@@ -10,7 +10,6 @@ import { getUserWallets, Wallet } from '@/lib/userData';
 import { WalletEditCard } from '@/components/WalletEditCard';
 import { Card } from '@/components/ui/card';
 import { formatCurrency } from '@/lib/currencyUtils';
-import { translations } from '@/lib/translations';
 import { useSearchParams } from 'next/navigation';
 
 export default function WalletPage() {
@@ -18,7 +17,6 @@ export default function WalletPage() {
   const { currency, language } = useSettingsStore();
   const { getUserTransactions } = useTransactionStore();
   const { openModal } = useModalStore();
-  const t = translations[language];
   const searchParams = useSearchParams();
   const openWalletId = searchParams.get('open');
 
@@ -58,8 +56,7 @@ export default function WalletPage() {
               wallet={wallet}
               iconName={wallet.icon}
               isOpen={wallet.id.toString() === openWalletId}
-              onUpdate={handleUpdate}
-            />
+              onUpdate={handleUpdate} currencySymbol={''}            />
           ))}
         </div>
 

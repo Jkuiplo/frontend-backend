@@ -2,7 +2,6 @@
 
 import { usePageStore } from '@/store/usePageStore';
 import { useSettingsStore } from '@/store/useSettingsStore';
-import { translations } from '@/lib/translations';
 import { Plus } from 'lucide-react';
 
 type ButtonProps = {
@@ -12,7 +11,6 @@ type ButtonProps = {
 export default function Button({ onClick }: ButtonProps) {
   const { currentPage } = usePageStore();
   const { language } = useSettingsStore();
-  const t = translations[language];
 
   const buttonTitles: Record<string, { en: string; ru: string }> = {
     home: { en: 'Add transaction', ru: 'Добавить транзакцию' },

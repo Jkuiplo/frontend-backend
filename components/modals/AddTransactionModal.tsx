@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useModalStore } from '@/store/useModalStore';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useTransactionStore } from '@/store/useTransactionStore';
@@ -26,7 +26,7 @@ import { Label } from '@/components/ui/label';
 export default function AddTransactionModal() {
   const { closeModal } = useModalStore();
   const { user } = useAuthStore();
-  const { addTransaction, refreshTransactions } = useTransactionStore(); // Добавили refreshTransactions
+  const { addTransaction, triggerUpdate } = useTransactionStore();
   const { currency, language } = useSettingsStore();
   const t = translations[language];
 
@@ -39,9 +39,26 @@ export default function AddTransactionModal() {
     new Date().toISOString().slice(0, 16)
   );
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [wallets, setWallets] = useState<ReturnType<typeof getUserWallets>>([]);
+  const [categories, setCategories] = useState<
+    ReturnType<typeof getUserCategories>
+  >([]);
 
-  const wallets = user ? getUserWallets(user.id) : [];
-  const categories = user ? getUserCategories(user.id) : [];
+  // Загружаем актуальные данные
+  useEffect(() => {
+    if (user) {
+      const userWallets = getUserWallets(user.id);
+      const userCategories = getUserCategories(user.id);
+      setWallets(userWallets);
+      setCategories(userCategories);
+
+      // Автоматически выбираем первый кошелек
+      if (userWallets.length > 0 && !selectedWallet) {
+        setSelectedWallet(userWallets[0].id.toString());
+      }
+    }
+  }, [user]);
 
   const validateAmount = (value: string): boolean => {
     const numValue = parseFloat(value);
@@ -51,7 +68,6 @@ export default function AddTransactionModal() {
   const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setAmount(value);
-
     if (value && !validateAmount(value)) {
       setError('Amount must be at least 1');
     } else {
@@ -59,26 +75,31 @@ export default function AddTransactionModal() {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setLoading(true);
+    setError('');
 
     // Валидация
     if (!amount || !validateAmount(amount)) {
       setError('Amount must be at least 1');
+      setLoading(false);
       return;
     }
 
     if (!selectedWallet) {
       setError('Please select a wallet');
+      setLoading(false);
       return;
     }
 
     if (type === 'expense' && !selectedCategory) {
       setError('Please select a category for expense');
+      setLoading(false);
       return;
     }
 
-    // Проверка баланса кошелька для расходов
+    // Проверка баланса для расходов
     if (type === 'expense') {
       const wallet = wallets.find((w) => w.id === parseInt(selectedWallet));
       const amountNum = parseFloat(amount);
@@ -87,30 +108,41 @@ export default function AddTransactionModal() {
         setError(
           `Insufficient funds. Wallet balance: ${currencySymbols[currency]}${wallet.amount.toLocaleString()}`
         );
+        setLoading(false);
         return;
       }
     }
 
-    addTransaction({
-      type,
-      amount: parseFloat(amount),
-      comment,
-      walletId: parseInt(selectedWallet),
-      categoryId: type === 'expense' ? selectedCategory : undefined,
-      date: new Date(transactionDate).toISOString(),
-      userId: user!.id,
-    });
+    try {
+      // Добавляем транзакцию
+      addTransaction({
+        type,
+        amount: parseFloat(amount),
+        comment,
+        walletId: parseInt(selectedWallet),
+        categoryId: type === 'expense' ? selectedCategory : undefined,
+        date: new Date(transactionDate).toISOString(),
+        userId: user!.id,
+      });
 
-    // Обновляем все компоненты, которые зависят от транзакций
-    refreshTransactions();
+      // Запускаем обновление всех компонентов
+      triggerUpdate();
 
-    closeModal('add');
-    setAmount('');
-    setComment('');
-    setSelectedWallet('');
-    setSelectedCategory('');
-    setTransactionDate(new Date().toISOString().slice(0, 16));
-    setError('');
+      // Закрываем модалку
+      setTimeout(() => {
+        closeModal('add');
+        setLoading(false);
+        // Сбрасываем форму
+        setAmount('');
+        setComment('');
+        setSelectedWallet(wallets.length > 0 ? wallets[0].id.toString() : '');
+        setSelectedCategory('');
+        setTransactionDate(new Date().toISOString().slice(0, 16));
+      }, 300);
+    } catch (err) {
+      setError('Failed to add transaction');
+      setLoading(false);
+    }
   };
 
   return (
@@ -126,6 +158,7 @@ export default function AddTransactionModal() {
         <button
           onClick={() => closeModal('add')}
           className="p-2 rounded-lg hover:bg-[var(--secondary-bg)] transition"
+          disabled={loading}
         >
           <X className="w-5 h-5" />
         </button>
@@ -147,8 +180,12 @@ export default function AddTransactionModal() {
           className="w-full"
         >
           <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="expense">{t.expenses}</TabsTrigger>
-            <TabsTrigger value="income">{t.incomes}</TabsTrigger>
+            <TabsTrigger value="expense" disabled={loading}>
+              {t.expenses}
+            </TabsTrigger>
+            <TabsTrigger value="income" disabled={loading}>
+              {t.incomes}
+            </TabsTrigger>
           </TabsList>
         </Tabs>
 
@@ -171,6 +208,7 @@ export default function AddTransactionModal() {
               className="pl-10"
               placeholder="1.00"
               required
+              disabled={loading}
             />
           </div>
           <p className="text-xs text-muted-foreground">Minimum amount is 1</p>
@@ -185,6 +223,7 @@ export default function AddTransactionModal() {
             onChange={(e) => setTransactionDate(e.target.value)}
             className="w-full"
             required
+            disabled={loading}
           />
         </div>
 
@@ -197,6 +236,7 @@ export default function AddTransactionModal() {
               value={comment}
               onChange={(e) => setComment(e.target.value)}
               placeholder={t.comment}
+              disabled={loading}
             />
           </div>
         )}
@@ -210,6 +250,7 @@ export default function AddTransactionModal() {
                 setSelectedWallet(value);
                 setError('');
               }}
+              disabled={loading}
             >
               <SelectTrigger>
                 <SelectValue placeholder={t.selectWallet} />
@@ -233,6 +274,7 @@ export default function AddTransactionModal() {
                   setSelectedCategory(value);
                   setError('');
                 }}
+                disabled={loading}
               >
                 <SelectTrigger>
                   <SelectValue placeholder={t.selectCategory} />
@@ -255,11 +297,12 @@ export default function AddTransactionModal() {
             variant="outline"
             className="flex-1"
             onClick={() => closeModal('add')}
+            disabled={loading}
           >
             {t.cancel}
           </Button>
-          <Button type="submit" className="flex-1">
-            {t.add}
+          <Button type="submit" className="flex-1" disabled={loading}>
+            {loading ? `${t.add}...` : t.add}
           </Button>
         </div>
       </form>

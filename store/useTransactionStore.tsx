@@ -19,20 +19,25 @@ export interface Transaction {
 
 interface TransactionState {
   transactions: Transaction[];
+  transactionUpdated: boolean;
+  // Основные операции
   addTransaction: (
     transaction: Omit<Transaction, 'id'> & { date?: string }
   ) => void;
   updateTransaction: (id: string, transaction: Partial<Transaction>) => void;
   deleteTransaction: (id: string) => void;
+  deleteTransactionsByWalletId: (userId: string, walletId: number) => void;
+  // Получение данных
   getUserTransactions: (userId: string) => Transaction[];
   getTransactionsByDateRange: (
     userId: string,
     startDate: Date,
     endDate: Date
   ) => Transaction[];
-  // Триггер для обновления
-  transactionUpdated: boolean;
+  getTransactionCountByWallet: (userId: string, walletId: number) => number;
+  // Обновление UI
   triggerUpdate: () => void;
+  refreshAllData: () => void;
 }
 
 export const useTransactionStore = create<TransactionState>()(
@@ -41,14 +46,15 @@ export const useTransactionStore = create<TransactionState>()(
       transactions: [],
       transactionUpdated: false,
 
+      // Добавление транзакции с обновлением баланса
       addTransaction: (transaction) => {
         const newTransaction: Transaction = {
           ...transaction,
-          id: `${transaction.userId}_tx_${Date.now()}`,
+          id: `${transaction.userId}_tx_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
           date: transaction.date || new Date().toISOString(),
         };
 
-        // Обновляем баланс кошелька
+        // Обновляем баланс кошелька (если это не начальный баланс)
         if (transaction.userId) {
           const wallets = getUserWallets(transaction.userId);
           const wallet = wallets.find((w) => w.id === transaction.walletId);
@@ -62,6 +68,7 @@ export const useTransactionStore = create<TransactionState>()(
               newAmount -= transaction.amount;
             }
 
+            // Обновляем кошелек
             updateUserWallet(
               transaction.userId,
               wallet.id,
@@ -74,10 +81,11 @@ export const useTransactionStore = create<TransactionState>()(
 
         set((state) => ({
           transactions: [...state.transactions, newTransaction],
-          transactionUpdated: !state.transactionUpdated, // Триггер для обновления
+          transactionUpdated: !state.transactionUpdated,
         }));
       },
 
+      // Обновление транзакции
       updateTransaction: (id, updatedData) => {
         const oldTransaction = get().transactions.find((tx) => tx.id === id);
 
@@ -123,6 +131,7 @@ export const useTransactionStore = create<TransactionState>()(
         }));
       },
 
+      // Удаление транзакции с возвратом баланса
       deleteTransaction: (id) => {
         const transaction = get().transactions.find((tx) => tx.id === id);
 
@@ -135,9 +144,9 @@ export const useTransactionStore = create<TransactionState>()(
             let newAmount = wallet.amount;
 
             if (transaction.type === 'income') {
-              newAmount -= transaction.amount; // Убираем доход
+              newAmount -= transaction.amount;
             } else if (transaction.type === 'expense') {
-              newAmount += transaction.amount; // Возвращаем расход
+              newAmount += transaction.amount;
             }
 
             updateUserWallet(
@@ -156,10 +165,22 @@ export const useTransactionStore = create<TransactionState>()(
         }));
       },
 
+      // Удаление всех транзакций кошелька (без возврата баланса)
+      deleteTransactionsByWalletId: (userId: string, walletId: number) => {
+        set((state) => ({
+          transactions: state.transactions.filter(
+            (tx) => !(tx.userId === userId && tx.walletId === walletId)
+          ),
+          transactionUpdated: !state.transactionUpdated,
+        }));
+      },
+
+      // Получение транзакций пользователя
       getUserTransactions: (userId) => {
         return get().transactions.filter((tx) => tx.userId === userId);
       },
 
+      // Получение транзакций за период
       getTransactionsByDateRange: (userId, startDate, endDate) => {
         return get().transactions.filter((tx) => {
           if (tx.userId !== userId) return false;
@@ -168,7 +189,22 @@ export const useTransactionStore = create<TransactionState>()(
         });
       },
 
+      // Количество транзакций кошелька
+      getTransactionCountByWallet: (userId, walletId) => {
+        return get().transactions.filter(
+          (tx) => tx.userId === userId && tx.walletId === walletId
+        ).length;
+      },
+
+      // Триггер для обновления UI
       triggerUpdate: () => {
+        set((state) => ({
+          transactionUpdated: !state.transactionUpdated,
+        }));
+      },
+
+      // Полное обновление данных
+      refreshAllData: () => {
         set((state) => ({
           transactionUpdated: !state.transactionUpdated,
         }));

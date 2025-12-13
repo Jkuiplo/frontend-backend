@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useModalStore } from '@/store/useModalStore';
 import { useAuthStore } from '@/store/useAuthStore';
+import { useTransactionStore } from '@/store/useTransactionStore';
 import { addUserWallet } from '@/lib/userData';
 import { useSettingsStore } from '@/store/useSettingsStore';
 import { translations } from '@/lib/translations';
@@ -32,7 +33,6 @@ import {
   X,
 } from 'lucide-react';
 
-// Убираем подписи, оставляем только value и иконку
 const walletIcons = [
   { value: 'Wallet', icon: WalletIcon },
   { value: 'Banknote', icon: Banknote },
@@ -48,7 +48,6 @@ const walletIcons = [
   { value: 'Home', icon: Home },
 ];
 
-// Карта иконок для быстрого доступа
 const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   Wallet: WalletIcon,
   Banknote,
@@ -67,6 +66,7 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
 export default function AddWalletModal() {
   const { closeModal } = useModalStore();
   const { user } = useAuthStore();
+  const { triggerUpdate } = useTransactionStore();
   const { language, currency } = useSettingsStore();
   const t = translations[language];
 
@@ -74,19 +74,18 @@ export default function AddWalletModal() {
   const [balance, setBalance] = useState('');
   const [selectedIcon, setSelectedIcon] = useState('Wallet');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const validateBalance = (value: string): boolean => {
     const numValue = parseFloat(value);
     return !isNaN(numValue) && numValue >= 0;
   };
 
-  // Получаем компонент иконки из карты
   const IconComponent = iconMap[selectedIcon] || WalletIcon;
 
   const handleBalanceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setBalance(value);
-
     if (value && !validateBalance(value)) {
       setError('Balance cannot be negative');
     } else {
@@ -94,25 +93,46 @@ export default function AddWalletModal() {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setLoading(true);
+    setError('');
+
     if (!user || !walletName || !balance) {
       setError('Please fill all required fields');
+      setLoading(false);
       return;
     }
 
     if (!validateBalance(balance)) {
       setError('Balance cannot be negative');
+      setLoading(false);
       return;
     }
 
-    addUserWallet(user.id, walletName, parseFloat(balance), selectedIcon);
-    closeModal('addWallet');
-    setWalletName('');
-    setBalance('');
-    setSelectedIcon('Wallet');
-    setError('');
-    window.location.reload();
+    try {
+      const balanceNum = parseFloat(balance);
+
+      // Создаем кошелек с указанным балансом
+      // НЕ создаем транзакцию - это НАЧАЛЬНЫЙ БАЛАНС
+      addUserWallet(user.id, walletName, balanceNum, selectedIcon);
+
+      // Обновляем все компоненты
+      triggerUpdate();
+
+      // Закрываем модалку
+      setTimeout(() => {
+        closeModal('addWallet');
+        setLoading(false);
+        // Сбрасываем форму
+        setWalletName('');
+        setBalance('');
+        setSelectedIcon('Wallet');
+      }, 300);
+    } catch (err) {
+      setError('Failed to add wallet. Please try again.');
+      setLoading(false);
+    }
   };
 
   return (
@@ -128,6 +148,7 @@ export default function AddWalletModal() {
         <button
           onClick={() => closeModal('addWallet')}
           className="p-2 rounded-lg hover:bg-[var(--secondary-bg)] transition"
+          disabled={loading}
         >
           <X className="w-5 h-5" />
         </button>
@@ -150,13 +171,18 @@ export default function AddWalletModal() {
               onChange={(e) => setWalletName(e.target.value)}
               placeholder={t.walletName}
               required
+              disabled={loading}
             />
           </div>
 
           <div className="space-y-2">
             <Label>Icon *</Label>
-            <Select value={selectedIcon} onValueChange={setSelectedIcon}>
-              <SelectTrigger className="w-[100px]">
+            <Select
+              value={selectedIcon}
+              onValueChange={setSelectedIcon}
+              disabled={loading}
+            >
+              <SelectTrigger className="w-[100px]" disabled={loading}>
                 <div className="flex items-center gap-2">
                   <IconComponent className="w-4 h-4" />
                 </div>
@@ -165,7 +191,11 @@ export default function AddWalletModal() {
                 {walletIcons.map((icon) => {
                   const Icon = icon.icon;
                   return (
-                    <SelectItem key={icon.value} value={icon.value}>
+                    <SelectItem
+                      key={icon.value}
+                      value={icon.value}
+                      disabled={loading}
+                    >
                       <div className="flex items-center justify-center">
                         <Icon className="w-4 h-4" />
                       </div>
@@ -196,6 +226,7 @@ export default function AddWalletModal() {
               className="pl-10"
               placeholder="0.00"
               required
+              disabled={loading}
             />
           </div>
           <p className="text-xs text-muted-foreground">Minimum balance is 0</p>
@@ -207,11 +238,12 @@ export default function AddWalletModal() {
             variant="outline"
             className="flex-1"
             onClick={() => closeModal('addWallet')}
+            disabled={loading}
           >
             {t.cancel}
           </Button>
-          <Button type="submit" className="flex-1">
-            {t.add}
+          <Button type="submit" className="flex-1" disabled={loading}>
+            {loading ? `${t.add}...` : t.add}
           </Button>
         </div>
       </form>

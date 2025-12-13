@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { Card } from '@/components/ui/card';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useTransactionStore } from '@/store/useTransactionStore';
@@ -37,20 +37,21 @@ interface TooltipProps {
       name: string;
       value: number;
       percentage: number;
+      date: string;
     };
     value: number;
   }>;
   label?: string;
 }
 
-// Компонент для подсказки графика
 const CustomTooltip = ({ active, payload, label }: TooltipProps) => {
   if (active && payload && payload.length) {
+    const data = payload[0].payload;
     return (
       <div className="bg-background border rounded-lg p-3 shadow-lg">
-        <p className="font-medium">{label}</p>
+        <p className="font-medium">{label || data.date}</p>
         <p className="text-sm text-muted-foreground">
-          Balance: {formatCurrency(payload[0].value, 'USD')}
+          Balance: {formatCurrency(data.value, 'USD')}
         </p>
       </div>
     );
@@ -58,7 +59,6 @@ const CustomTooltip = ({ active, payload, label }: TooltipProps) => {
   return null;
 };
 
-// Компонент для подсказки круговой диаграммы
 const PieTooltip = ({ active, payload }: TooltipProps) => {
   if (active && payload && payload.length) {
     const data = payload[0].payload;
@@ -79,29 +79,36 @@ const PieTooltip = ({ active, payload }: TooltipProps) => {
 
 export default function StatisticsPage() {
   const { user } = useAuthStore();
-  const { getUserTransactions } = useTransactionStore();
+  const { getUserTransactions, transactionUpdated } = useTransactionStore();
   const { currency, language } = useSettingsStore();
   const t = translations[language];
 
   const [timePeriod, setTimePeriod] = useState<TimePeriod>('month');
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  useEffect(() => {
+    setRefreshKey((prev) => prev + 1);
+  }, [transactionUpdated]);
 
   const transactions = useMemo(() => {
     if (!user) return [];
     return getUserTransactions(user.id);
-  }, [user, getUserTransactions]);
+  }, [user, getUserTransactions, refreshKey]);
 
   const categories = useMemo(() => {
     if (!user) return [];
     return getUserCategories(user.id);
-  }, [user]);
+  }, [user, refreshKey]);
 
   const wallets = useMemo(() => {
     if (!user) return [];
     return getUserWallets(user.id);
-  }, [user]);
+  }, [user, refreshKey]);
 
-  // Фильтрация транзакций по выбранному периоду
+  // Фильтрация транзакций по периоду
   const filteredTransactions = useMemo(() => {
+    if (timePeriod === 'all') return transactions;
+
     const now = new Date();
     const startDate = new Date();
 
@@ -115,34 +122,37 @@ export default function StatisticsPage() {
       case 'year':
         startDate.setFullYear(now.getFullYear() - 1);
         break;
-      case 'all':
-        return transactions;
     }
 
     return transactions.filter((tx) => new Date(tx.date) >= startDate);
   }, [transactions, timePeriod]);
 
-  // Расчет общего баланса за период
-  const totalBalance = useMemo(() => {
+  // Общий баланс кошельков
+  const totalWalletBalance = useMemo(() => {
+    return wallets.reduce((sum, wallet) => sum + wallet.amount, 0);
+  }, [wallets]);
+
+  // Баланс за период (только изменения)
+  const periodBalanceChange = useMemo(() => {
     return filteredTransactions.reduce((acc, tx) => {
-      if (tx.type === 'income') {
-        return acc + tx.amount;
-      } else {
-        return acc - tx.amount;
-      }
+      return tx.type === 'income' ? acc + tx.amount : acc - tx.amount;
     }, 0);
   }, [filteredTransactions]);
 
-  // Данные для графика баланса (группировка по датам)
+  // Данные для графика баланса
   const balanceTrendData = useMemo(() => {
-    const dataMap: Record<string, number> = {};
+    if (filteredTransactions.length === 0) {
+      return [{ date: 'No data', balance: totalWalletBalance }];
+    }
 
-    // Сортируем транзакции по дате
+    // Сортируем транзакции
     const sortedTransactions = [...filteredTransactions].sort(
       (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
     );
 
-    let cumulativeBalance = 0;
+    // Группируем по датам
+    const dateMap: Map<string, number> = new Map();
+    let cumulativeBalance = totalWalletBalance - periodBalanceChange;
 
     sortedTransactions.forEach((tx) => {
       const date = new Date(tx.date);
@@ -175,16 +185,21 @@ export default function StatisticsPage() {
         cumulativeBalance -= tx.amount;
       }
 
-      dataMap[key] = cumulativeBalance;
+      dateMap.set(key, cumulativeBalance);
     });
 
-    return Object.entries(dataMap).map(([date, balance]) => ({
+    return Array.from(dateMap.entries()).map(([date, balance]) => ({
       date,
       balance,
     }));
-  }, [filteredTransactions, timePeriod]);
+  }, [
+    filteredTransactions,
+    timePeriod,
+    totalWalletBalance,
+    periodBalanceChange,
+  ]);
 
-  // Данные для круговой диаграммы (распределение по категориям)
+  // Данные для диаграммы категорий
   const categoryDistributionData = useMemo(() => {
     const expensesByCategory: Record<
       string,
@@ -219,16 +234,14 @@ export default function StatisticsPage() {
         ...item,
         percentage: total > 0 ? Math.round((item.value / total) * 100) : 0,
       }))
-      .sort((a, b) => b.value - a.value)
-      .slice(0, 5);
+      .sort((a, b) => b.value - a.value);
   }, [filteredTransactions, categories]);
 
-  // Группировка топ транзакций
+  // Топ транзакции
   const topTransactionsData = useMemo(() => {
-    // Группировка доходов
     const incomeGroups: Record<
       string,
-      { name: string; amount: number; type: 'income' }
+      { name: string; amount: number; type: 'income'; icon: string }
     > = {};
     const expenseGroups: Record<
       string,
@@ -239,12 +252,14 @@ export default function StatisticsPage() {
       if (tx.type === 'income') {
         const wallet = wallets.find((w) => w.id === tx.walletId);
         const walletName = wallet?.name || 'Unknown Wallet';
+        const walletIcon = wallet?.icon || 'Wallet';
 
         if (!incomeGroups[walletName]) {
           incomeGroups[walletName] = {
             name: walletName,
             amount: 0,
             type: 'income',
+            icon: walletIcon,
           };
         }
         incomeGroups[walletName].amount += tx.amount;
@@ -265,13 +280,10 @@ export default function StatisticsPage() {
       }
     });
 
-    // Объединяем и сортируем
     const allGroups = [
       ...Object.values(incomeGroups),
       ...Object.values(expenseGroups),
-    ]
-      .sort((a, b) => b.amount - a.amount)
-      .slice(0, 6); // Берем топ 6
+    ].sort((a, b) => b.amount - a.amount);
 
     return allGroups;
   }, [filteredTransactions, categories, wallets]);
@@ -291,7 +303,6 @@ export default function StatisticsPage() {
     }, {} as ChartConfig),
   } satisfies ChartConfig;
 
-  // Подготовка данных для круговой диаграммы
   const pieChartData = categoryDistributionData.map((item, index) => ({
     name: item.name,
     visitors: item.value,
@@ -312,6 +323,17 @@ export default function StatisticsPage() {
       return config;
     }, {} as ChartConfig),
   } satisfies ChartConfig;
+
+  // Формат счетчика
+  const getItemCountText = (count: number) => {
+    return `${count} item${count !== 1 ? 's' : ''}`;
+  };
+
+  // Текущий баланс
+  const currentBalance =
+    balanceTrendData.length > 0
+      ? balanceTrendData[balanceTrendData.length - 1].balance
+      : totalWalletBalance;
 
   return (
     <div className="mx-auto min-h-screen max-w-7xl p-4">
@@ -335,12 +357,12 @@ export default function StatisticsPage() {
       </div>
 
       <div className="grid grid-cols-2 gap-6 mb-6">
-        {/* Balance Trend Card */}
+        {/* Balance Trend */}
         <Card className="p-8">
           <div className="mb-6">
             <h2 className="text-xl font-bold">Balance Trend</h2>
             <div className="text-4xl font-bold mt-2">
-              {formatCurrency(totalBalance, currency)}
+              {formatCurrency(currentBalance, currency)}
             </div>
           </div>
 
@@ -376,7 +398,7 @@ export default function StatisticsPage() {
           </ChartContainer>
         </Card>
 
-        {/* Category Distribution Card */}
+        {/* Category Distribution */}
         <Card className="p-8">
           <div className="mb-8">
             <h2 className="text-xl font-bold">Category Distribution</h2>
@@ -404,8 +426,8 @@ export default function StatisticsPage() {
               </ChartContainer>
             </div>
 
-            <div className="w-1/2 pl-8">
-              <div className="space-y-4">
+            <div className="w-1/2 pl-8 max-h-[250px] overflow-y-auto">
+              <div className="space-y-4 pr-2">
                 {categoryDistributionData.map((category, index) => {
                   const IconComponent = getCategoryIconComponent(category.icon);
                   return (
@@ -415,18 +437,20 @@ export default function StatisticsPage() {
                     >
                       <div className="flex items-center gap-3">
                         <div
-                          className="w-3 h-3 rounded-full"
+                          className="w-3 h-3 rounded-full flex-shrink-0"
                           style={{
                             backgroundColor: `var(--chart-${(index % 5) + 1})`,
                           }}
                         />
-                        <div className="flex items-center gap-2">
-                          <IconComponent className="w-4 h-4 text-muted-foreground" />
-                          <span className="text-sm">{category.name}</span>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <IconComponent className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                          <span className="text-sm truncate">
+                            {category.name}
+                          </span>
                         </div>
                       </div>
-                      <div className="text-right">
-                        <div className="text-sm font-medium">
+                      <div className="text-right flex-shrink-0">
+                        <div className="text-sm font-medium whitespace-nowrap">
                           {formatCurrency(category.value, currency)}
                         </div>
                         <div className="text-xs text-muted-foreground">
@@ -442,76 +466,51 @@ export default function StatisticsPage() {
         </Card>
       </div>
 
-      {/* Top Transactions Card */}
+      {/* Top Transactions */}
       <Card className="p-8">
-        <div className="mb-6">
+        <div className="flex items-center justify-between mb-6">
           <h2 className="text-xl font-bold">Top Transactions</h2>
+          <span className="text-sm font-medium px-3 py-1 rounded-full bg-secondary text-secondary-foreground">
+            {getItemCountText(topTransactionsData.length)}
+          </span>
         </div>
 
         <div className="grid grid-cols-2 gap-4">
           {topTransactionsData.map((group, index) => {
             const isIncome = group.type === 'income';
+            const IconComponent = isIncome
+              ? getWalletIconComponent(group.icon)
+              : getCategoryIconComponent(group.icon);
 
-            if (isIncome) {
-              // Для доходов показываем иконку кошелька
-              const wallet = wallets.find((w) => w.name === group.name);
-              const IconComponent = getWalletIconComponent(
-                wallet?.icon || 'Wallet'
-              );
-
-              return (
-                <Card
-                  key={`income-${index}`}
-                  className="p-5 flex items-center justify-between hover:shadow-md transition-shadow"
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-2xl flex items-center justify-center bg-muted">
-                      <IconComponent className="w-6 h-6 text-green-500" />
-                    </div>
-                    <div>
-                      <div className="font-semibold">{group.name}</div>
-                      <div className="text-sm text-muted-foreground">
-                        Total Income
-                      </div>
+            return (
+              <Card
+                key={`${group.type}-${index}`}
+                className="p-5 flex items-center justify-between hover:shadow-md transition-shadow"
+              >
+                <div className="flex items-center gap-4 min-w-0">
+                  <div className="w-12 h-12 rounded-2xl flex items-center justify-center bg-muted flex-shrink-0">
+                    <IconComponent
+                      className={`w-6 h-6 ${isIncome ? 'text-green-500' : 'text-red-500'}`}
+                    />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="font-semibold truncate">{group.name}</div>
+                    <div className="text-sm text-muted-foreground">
+                      {isIncome ? 'Total Income' : 'Total Expense'}
                     </div>
                   </div>
+                </div>
 
-                  <div className="text-right">
-                    <div className="font-bold text-green-500">
-                      +{formatCurrency(group.amount, currency)}
-                    </div>
+                <div className="text-right flex-shrink-0">
+                  <div
+                    className={`font-bold text-lg ${isIncome ? 'text-green-500' : 'text-red-500'} whitespace-nowrap`}
+                  >
+                    {isIncome ? '+' : '-'}
+                    {formatCurrency(group.amount, currency)}
                   </div>
-                </Card>
-              );
-            } else {
-              // Для расходов показываем иконку категории
-              const IconComponent = getCategoryIconComponent(group.icon);
-
-              return (
-                <Card
-                  key={`expense-${index}`}
-                  className="p-5 flex items-center justify-between hover:shadow-md transition-shadow"
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-2xl flex items-center justify-center bg-muted">
-                      <IconComponent className="w-6 h-6 text-red-500" />
-                    </div>
-                    <div>
-                      <div className="font-semibold">{group.name}</div>
-                      <div className="text-sm text-muted-foreground">
-                        Total Expense
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="text-right">
-                    <div className="font-bold text-red-500">
-                      -{formatCurrency(group.amount, currency)}
-                    </div>
-                  </div>
-                </Card>
-              );
-            }
+                </div>
+              </Card>
+            );
           })}
         </div>
 

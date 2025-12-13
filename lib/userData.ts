@@ -144,3 +144,22 @@ export function deleteUserWallet(userId: string, id: number): void {
   
   localStorage.setItem(WALLETS_KEY, JSON.stringify(filteredWallets));
 }
+
+// НОВАЯ ФУНКЦИЯ: Проверка, есть ли транзакции у кошелька
+export function getWalletTransactionCount(userId: string, walletId: number): number {
+  if (typeof window === 'undefined') return 0;
+  
+  try {
+    const transactionsData = localStorage.getItem('void-transactions-storage');
+    if (!transactionsData) return 0;
+    
+    const parsed = JSON.parse(transactionsData);
+    const transactions = parsed.state?.transactions || [];
+    
+    return transactions.filter(
+      (tx: any) => tx.userId === userId && tx.walletId === walletId
+    ).length;
+  } catch {
+    return 0;
+  }
+}

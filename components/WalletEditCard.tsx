@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuthStore } from '@/store/useAuthStore';
 import { updateUserWallet, deleteUserWallet, Wallet } from '@/lib/userData';
+import { useTransactionStore } from '@/store/useTransactionStore';
 import {
   Wallet as WalletIcon,
   Banknote,
@@ -20,11 +21,11 @@ import {
   Briefcase,
   Smartphone,
   Home,
-} from 'lucide-react'; // Добавляем все иконки
+  AlertTriangle,
+} from 'lucide-react';
 import { useSettingsStore } from '@/store/useSettingsStore';
 import { formatCurrency } from '@/lib/currencyUtils';
 
-// Обновляем карту иконок с новыми иконками
 const iconMap = {
   Wallet: WalletIcon,
   Banknote: Banknote,
@@ -40,7 +41,6 @@ const iconMap = {
   Home: Home,
 };
 
-// Обновляем список доступных иконок
 const availableIcons = [
   { name: 'Wallet', component: WalletIcon },
   { name: 'Banknote', component: Banknote },
@@ -70,10 +70,25 @@ export function WalletEditCard({
   onUpdate,
 }: WalletEditCardProps) {
   const { user } = useAuthStore();
-  const { currency } = useSettingsStore();
+  const {
+    deleteTransactionsByWalletId,
+    getTransactionCountByWallet,
+    triggerUpdate,
+  } = useTransactionStore();
+  const { currency, language } = useSettingsStore();
   const [isEditing, setIsEditing] = useState(isOpen);
   const [name, setName] = useState(wallet.name);
   const [selectedIcon, setSelectedIcon] = useState(wallet.icon);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [transactionCount, setTransactionCount] = useState(0);
+
+  // Получаем количество транзакций кошелька
+  useEffect(() => {
+    if (user) {
+      const count = getTransactionCountByWallet(user.id, wallet.id);
+      setTransactionCount(count);
+    }
+  }, [user, wallet.id, getTransactionCountByWallet]);
 
   const IconComponent = iconMap[iconName as keyof typeof iconMap] || WalletIcon;
 
@@ -86,17 +101,31 @@ export function WalletEditCard({
       user.id,
       wallet.id,
       name,
-      wallet.amount, // Сохраняем исходный баланс без изменений
+      wallet.amount, // Сохраняем исходный баланс
       selectedIcon
     );
+    triggerUpdate();
     onUpdate();
   };
 
   const handleDelete = async () => {
     if (!user?.id) return;
 
-    setIsEditing(false);
+    // Если есть транзакции, показываем подтверждение
+    if (transactionCount > 0 && !showDeleteConfirm) {
+      setShowDeleteConfirm(true);
+      return;
+    }
+
+    // Удаляем все транзакции кошелька
+    deleteTransactionsByWalletId(user.id, wallet.id);
+
+    // Удаляем кошелек
     deleteUserWallet(user.id, wallet.id);
+
+    setIsEditing(false);
+    setShowDeleteConfirm(false);
+    triggerUpdate();
     onUpdate();
   };
 
@@ -104,12 +133,17 @@ export function WalletEditCard({
     setName(wallet.name);
     setSelectedIcon(wallet.icon);
     setIsEditing(false);
+    setShowDeleteConfirm(false);
+  };
+
+  const handleCancelDelete = () => {
+    setShowDeleteConfirm(false);
   };
 
   if (!isEditing) {
     return (
       <div
-        className="rounded-2xl p-6 shadow-md border border-[var(--border)]"
+        className="rounded-2xl p-6 shadow-md border border-[var(--border)] hover:shadow-lg transition-shadow"
         style={{
           backgroundColor: 'var(--accent-bg)',
           color: 'var(--foreground)',
@@ -132,10 +166,15 @@ export function WalletEditCard({
             <Edit3 className="w-4 h-4" style={{ color: 'var(--foreground)' }} />
           </button>
         </div>
-        <h3 className="font-semibold text-lg mb-2">{wallet.name}</h3>
+        <h3 className="font-semibold text-lg mb-2 truncate">{wallet.name}</h3>
         <div className="text-2xl font-bold">
           {formatCurrency(wallet.amount, currency)}
         </div>
+        {transactionCount > 0 && (
+          <div className="text-xs text-muted-foreground mt-2">
+            {transactionCount} transaction{transactionCount !== 1 ? 's' : ''}
+          </div>
+        )}
       </div>
     );
   }
@@ -146,12 +185,46 @@ export function WalletEditCard({
   return (
     <form
       onSubmit={handleSubmit}
-      className="rounded-2xl p-6 shadow-md"
+      className="rounded-2xl p-6 shadow-md border border-[var(--border)]"
       style={{
         backgroundColor: 'var(--accent-bg)',
         color: 'var(--foreground)',
       }}
     >
+      {showDeleteConfirm && (
+        <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+          <div className="flex items-start gap-3 mb-3">
+            <AlertTriangle className="w-5 h-5 text-red-500 mt-0.5 flex-shrink-0" />
+            <div>
+              <p className="text-red-700 font-medium">
+                Delete "{wallet.name}" wallet?
+              </p>
+              <p className="text-sm text-red-600 mt-1">
+                This wallet has {transactionCount} transaction
+                {transactionCount !== 1 ? 's' : ''}. All transactions will be
+                permanently deleted.
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={handleCancelDelete}
+              className="flex-1 px-3 py-2 text-sm bg-gray-200 hover:bg-gray-300 rounded-lg transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleDelete}
+              className="flex-1 px-3 py-2 text-sm bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors"
+            >
+              Delete Anyway
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center justify-between mb-4">
         <div
           className="w-12 h-12 rounded-2xl flex items-center justify-center"
@@ -166,6 +239,7 @@ export function WalletEditCard({
           <button
             type="submit"
             className="p-2 rounded-lg transition-colors hover:bg-[var(--secondary-bg)]"
+            title="Save"
           >
             <Save className="w-4 h-4" style={{ color: 'var(--foreground)' }} />
           </button>
@@ -173,16 +247,23 @@ export function WalletEditCard({
             type="button"
             onClick={handleCancel}
             className="p-2 rounded-lg transition-colors hover:bg-[var(--secondary-bg)]"
+            title="Cancel"
           >
             <X className="w-4 h-4" style={{ color: 'var(--foreground)' }} />
           </button>
           <button
             type="button"
             onClick={handleDelete}
-            className="p-2 rounded-lg transition-colors hover:bg-red-50"
-            style={{ color: 'var(--foreground)' }}
+            className={`p-2 rounded-lg transition-colors ${
+              showDeleteConfirm
+                ? 'bg-red-500 hover:bg-red-600'
+                : 'hover:bg-red-50'
+            }`}
+            title="Delete"
           >
-            <Trash2 className="w-4 h-4 text-red-500" />
+            <Trash2
+              className={`w-4 h-4 ${showDeleteConfirm ? 'text-white' : 'text-red-500'}`}
+            />
           </button>
         </div>
       </div>
@@ -191,7 +272,7 @@ export function WalletEditCard({
         type="text"
         value={name}
         onChange={(e) => setName(e.target.value)}
-        className="w-full p-3 rounded-xl mb-4 focus:outline-none"
+        className="w-full p-3 rounded-xl mb-4 focus:outline-none focus:ring-2 focus:ring-primary"
         style={{
           backgroundColor: 'var(--secondary-bg)',
           color: 'var(--foreground)',
@@ -213,9 +294,10 @@ export function WalletEditCard({
               onClick={() => setSelectedIcon(icon.name)}
               className={`p-2 rounded-lg transition-colors flex items-center justify-center ${
                 selectedIcon === icon.name
-                  ? 'bg-[var(--secondary-bg)]'
+                  ? 'bg-[var(--secondary-bg)] ring-2 ring-primary'
                   : 'hover:bg-[var(--page-bg)]'
               }`}
+              title={icon.name}
             >
               <IconComponent
                 className="w-5 h-5"

@@ -23,25 +23,28 @@ export default function MainWalletPage() {
   const { openModal } = useModalStore();
   const t = translations[language];
 
+  // Состояние для принудительного обновления
+  const [refreshKey, setRefreshKey] = useState(0);
+
   useEffect(() => {
-    if (transactionUpdated !== undefined) {
-    }
+    // Обновляем компонент при изменении транзакций
+    setRefreshKey((prev) => prev + 1);
   }, [transactionUpdated]);
 
   const transactions = useMemo(() => {
     if (!user) return [];
     return getUserTransactions(user.id);
-  }, [user, getUserTransactions]);
+  }, [user, getUserTransactions, refreshKey]);
 
   const wallets = useMemo(() => {
     if (!user) return [];
     return getUserWallets(user.id);
-  }, [user]);
+  }, [user, refreshKey]);
 
   const categories = useMemo(() => {
     if (!user) return [];
     return getUserCategories(user.id);
-  }, [user]);
+  }, [user, refreshKey]);
 
   const [insufficientFundsWarning, setInsufficientFundsWarning] =
     useState<string>('');

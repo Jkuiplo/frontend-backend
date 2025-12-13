@@ -1,4 +1,5 @@
 'use client';
+
 import { useEffect, useState } from 'react';
 import { useSettingsStore } from '@/store/useSettingsStore';
 import { useAuthStore } from '@/store/useAuthStore';
@@ -18,7 +19,7 @@ export default function RootContent({
   useEffect(() => {
     setMounted(true);
     checkAuth();
-  }, [checkAuth]); // Убрали mounted из зависимостей
+  }, [checkAuth]);
 
   useEffect(() => {
     if (!mounted) return;
@@ -36,6 +37,22 @@ export default function RootContent({
       root.classList.remove('light', 'dark');
       root.classList.add(themeMode);
     }
+  }, [themeMode, mounted]);
+
+  // Обновляем тему при изменении системной темы
+  useEffect(() => {
+    if (!mounted || themeMode !== 'system') return;
+
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const handleChange = () => {
+      const root = document.documentElement;
+      const systemTheme = mediaQuery.matches ? 'dark' : 'light';
+      root.classList.remove('light', 'dark');
+      root.classList.add(systemTheme);
+    };
+
+    mediaQuery.addEventListener('change', handleChange);
+    return () => mediaQuery.removeEventListener('change', handleChange);
   }, [themeMode, mounted]);
 
   if (!mounted) {
